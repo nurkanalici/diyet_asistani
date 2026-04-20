@@ -60,7 +60,7 @@ class_names = [
 
 
 # =====================================================================
-# 2. OLLAMA FONKSİYONU (ZIRHLI PROMPT VE EKSİ KALORİ ENGELLEYİCİ)
+# 2. OLLAMA FONKSİYONU (AKADEMİK VE DETAYLI PROMPT)
 # =====================================================================
 def get_diet_recommendation(food_name, current_calories, target_calories, yas, boy, kilo, cinsiyet, boyun, bel, kalca):
     profil_detayi = f"{yas} yaşında, {boy} cm boyunda, {kilo} kilo ağırlığında bir {cinsiyet.lower()}"
@@ -73,18 +73,24 @@ def get_diet_recommendation(food_name, current_calories, target_calories, yas, b
     if ekstra_olculer:
         profil_detayi += f" (Ölçüleri: {', '.join(ekstra_olculer)})"
 
-    # LLaMA3'ün kafasını karıştırmayacak, çok daha net bir emir (Prompt) hazırladık:
+    # Kullanıcının yemeği yemeden önceki kalan kalorisini Python'da hesaplayıp modele hazır veriyoruz.
+    kalan_kalori = target_calories - current_calories
+
+    # HOCANIN İSTEDİĞİ VE "DİYETİSYEN KURALLARI" EKLENMİŞ YENİ PROMPT
     prompt = (
-        f"Sen uzman bir diyetisyensin. Kullanıcı az önce '{food_name}' yedi.\n"
-        f"Kullanıcı Profili: {profil_detayi}. Amacı sağlıklı beslenmek.\n"
-        f"Kullanıcı bu yemeği yemeden önce bugün {current_calories} kalori almıştı, günlük toplam hedefi ise {target_calories} kalori.\n"
-        f"Görevlerin:\n"
-        f"1. SADECE '{food_name}' yemeğinin 1 porsiyonunun tahmini kalorisini bul (Bu her zaman POZİTİF bir sayıdır).\n"
-        f"2. Kullanıcının mevcut durumuna göre mantıklı, Türkçe ve motive edici bir değerlendirme yapıp yarın için kısa bir tavsiye ver.\n"
-        f"SADECE aşağıdaki JSON formatında cevap ver:\n"
+        f"Sen hem uzman bir diyetisyen hem de tutkulu bir fitness koçusun. Kullanıcı az önce '{food_name}' yedi.\n"
+        f"Kullanıcı Profili: {profil_detayi}. Hedefi sağlıklı yaşam ve ideal kilosuna ulaşmak.\n"
+        f"Kullanıcının bu öğün öncesi kalan kalori hakkı: {kalan_kalori} kcal (Hedef: {target_calories}).\n\n"
+        f"GÖREVLERİN:\n"
+        f"1. ANALİZ: '{food_name}' yemeğinin porsiyon kalorisini hesapla. KESİN KURAL: Doğal/proteinli besinlere 'Sağlıklı', aşırı şekerli/işlenmiş besinlere 'Sağlıksız' de.\n"
+        f"2. MOTİVASYON: Sağlıklıysa 'Böyle devam et, çok iyi gidiyorsun!', sağlıksızsa 'Buna dikkat etmelisin, daha sağlıklı beslenmelisin.' diyerek analize başla.\n"
+        f"3. DİYETİSYEN ÖNERİSİ: Yuvarlak laflar etme! Kalan/aşılan kaloriye göre ertesi gün için SPESİFİK yemek isimleri ve kalorilerini barındıran net bir menü ver.\n"
+        f"4. SPORTİF KOÇLUK: Hep yürüyüş önerme! Kullanıcının profiline göre 'Ağırlık Antrenmanı', 'HIIT', 'Yüzme' veya 'Kardiyo' gibi çeşitli egzersizleri net süre belirterek öner.\n\n"
+        f"KATI FORMAT KURALI (SADECE JSON):\n"
+        f"React arayüzünün bozulmaması için tavsiye metninin içinde 'Yarın için öğün tavsiyem:' ve 'Egzersiz tavsiyem:' kelimeleri KESİNLİKLE bulunmalıdır.\n"
         f"{{\n"
-        f"  \"kalori\": (sadece pozitif bir sayı, örneğin: 350),\n"
-        f"  \"tavsiye\": \"Motive edici tavsiye metni buraya...\"\n"
+        f"  \"kalori\": (sadece sayı),\n"
+        f"  \"tavsiye\": \"[Motivasyon ve Sağlık Analizi]. Yarın için öğün tavsiyem: [Net Yemekler ve Kalorileri]. Egzersiz tavsiyem: [Ağırlık/HIIT/Kardiyo vb. Net Egzersiz Önerisi]\"\n"
         f"}}"
     )
 
@@ -95,15 +101,15 @@ def get_diet_recommendation(food_name, current_calories, target_calories, yas, b
             format='json'
         )
         result_text = response['message']['content'].strip()
+
+        import json
         data = json.loads(result_text)
 
-        # Eksi (-980 gibi) değerleri engellemek için MUTLAK DEĞER (abs) kullanıyoruz!
         kalori_str = str(data.get("kalori", 300)).replace("kcal", "").replace("kalori", "").replace(",", ".").strip()
         try:
-            # abs() fonksiyonu eksiyi artıya çevirir.
             kalori_val = abs(float(kalori_str))
             if kalori_val == 0:
-                kalori_val = 300.0  # 0 kalori olmaz, güvenlik için 300 ata
+                kalori_val = 300.0
         except ValueError:
             kalori_val = 300.0
 
@@ -113,7 +119,7 @@ def get_diet_recommendation(food_name, current_calories, target_calories, yas, b
 
     except Exception as e:
         print(f"Llama3 JSON Hatası: {e}")
-        return 300.0, "Yapay zeka tavsiye üretemedi, ancak yemeğiniz başarıyla günlüğe eklendi."
+        return 300.0, "Yapay zeka detaylı analiz yapamadı, ancak yemeğiniz başarıyla kaydedildi."
 
 # =====================================================================
 # 3. FASTAPI SUNUCUSU (JAVA'NIN VE REACT'İN İSTEK ATACAĞI KAPI)

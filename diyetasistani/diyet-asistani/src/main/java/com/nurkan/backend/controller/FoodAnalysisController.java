@@ -99,18 +99,23 @@ public class FoodAnalysisController {
     }
 
     // 2. TAKVİMİ YEŞİLE BOYAMAK İÇİN (Aktif Günleri Getirir)
+    // 2. TAKVİMİ VE TOOLTIP'LERİ DOLDURMAK İÇİN (Aktif Günleri ve Yemekleri Getirir)
     @GetMapping("/{userId}/active-days")
-    public ResponseEntity<List<String>> getActiveDays(@PathVariable Long userId) {
-        // Kullanıcı var mı diye kontrol et
+    public ResponseEntity<java.util.Map<String, java.util.List<String>>> getActiveDays(@PathVariable Long userId) {
         userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı"));
-
-        // HATA VEREN KISIM DÜZELTİLDİ: user.getFoodLogs() yerine veritabanından çekiyoruz!
         List<FoodLog> userLogs = foodLogRepository.findByUserId(userId);
 
-        List<String> activeDays = userLogs.stream()
-                .map(log -> log.getTarih().toString())
-                .distinct()
-                .collect(java.util.stream.Collectors.toList());
+        // Tarihlere göre yemek isimlerini gruplayan akıllı liste (Map)
+        java.util.Map<String, java.util.List<String>> activeDays = new java.util.HashMap<>();
+
+        for (FoodLog log : userLogs) {
+            String dateStr = log.getTarih().toString();
+            activeDays.putIfAbsent(dateStr, new java.util.ArrayList<>());
+
+            // Yemek ismindeki alt çizgileri temizleyerek listeye ekle
+            String temizYemekAdi = log.getYemekAdi().replace("_", " ").substring(0, 1).toUpperCase() + log.getYemekAdi().replace("_", " ").substring(1);
+            activeDays.get(dateStr).add(temizYemekAdi);
+        }
 
         return ResponseEntity.ok(activeDays);
     }
